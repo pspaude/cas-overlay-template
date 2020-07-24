@@ -3,16 +3,20 @@ package org.apereo.cas.authentication.principal;
 import org.apereo.cas.CasProtocolConstants;
 import org.apereo.cas.util.HttpRequestUtils;
 import org.apereo.cas.validation.ValidationResponseType;
-
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.apache.commons.lang3.StringUtils;
-
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
-
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Optional;
 
+
 /**
+ *  * Modified to accept a cookie representation of the CAS service parameter value!
+ *
  * The {@link WebApplicationServiceFactory} is responsible for
  * creating {@link WebApplicationService} objects.
  *
@@ -53,17 +57,16 @@ public class WebApplicationServiceFactory extends AbstractServiceFactory<WebAppl
     protected static AbstractWebApplicationService newWebApplicationService(final HttpServletRequest request,
                                                                             final String serviceToUse) {
         val artifactId = Optional.ofNullable(request)
-            .map(httpServletRequest -> httpServletRequest.getParameter(CasProtocolConstants.PARAMETER_TICKET))
-            .orElse(null);
+                .map(httpServletRequest -> httpServletRequest.getParameter(CasProtocolConstants.PARAMETER_TICKET))
+                .orElse(null);
         val id = cleanupUrl(serviceToUse);
         val newService = new SimpleWebApplicationServiceImpl(id, serviceToUse, artifactId);
         determineWebApplicationFormat(request, newService);
         val source = getSourceParameter(request, CasProtocolConstants.PARAMETER_TARGET_SERVICE,
-            CasProtocolConstants.PARAMETER_SERVICE);
+                CasProtocolConstants.PARAMETER_SERVICE);
         newService.setSource(source);
         return newService;
     }
-
 
     /**
      * Gets requested service.
@@ -95,6 +98,18 @@ public class WebApplicationServiceFactory extends AbstractServiceFactory<WebAppl
     public WebApplicationService createService(final HttpServletRequest request) {
         val serviceToUse = getRequestedService(request);
         if (StringUtils.isBlank(serviceToUse)) {
+            try {
+                if (request.getCookies() != null) {
+                    val entityId = URLEncoder.encode(request.getParameter("entityId"), StandardCharsets.UTF_8);
+                    final Optional<Cookie> serviceCookie = Arrays.stream(request.getCookies()).filter(c -> c.getName().equalsIgnoreCase(entityId)).findFirst();
+                    if (serviceCookie.isPresent()) {
+                        return newWebApplicationService(request, serviceCookie.get().getValue());
+                    }
+                }
+            } catch (Exception e) {
+                //swallowing since this method will execute for all requests
+            }
+
             LOGGER.trace("No service is specified in the request. Skipping service creation");
             return null;
         }
@@ -107,4 +122,3 @@ public class WebApplicationServiceFactory extends AbstractServiceFactory<WebAppl
         return newWebApplicationService(request, id);
     }
 }
-

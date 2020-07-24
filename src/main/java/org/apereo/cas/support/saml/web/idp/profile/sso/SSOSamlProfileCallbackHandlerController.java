@@ -68,7 +68,7 @@ public class SSOSamlProfileCallbackHandlerController extends AbstractSamlProfile
     protected void handleCallbackProfileRequest(final HttpServletResponse response,
                                                 final HttpServletRequest request) throws Exception {
         LOGGER.info("Received SAML callback profile request [{}]", request.getRequestURI());
-        val authnRequest = retrieveSamlAuthenticationRequestFromHttpRequest(request);
+        val authnRequest = retrieveSamlAuthenticationRequestFromHttpRequest(request, response);
         if (authnRequest == null) {
             LOGGER.error("Can not validate the request because the original Authn request can not be found.");
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
@@ -78,7 +78,7 @@ public class SSOSamlProfileCallbackHandlerController extends AbstractSamlProfile
         val ticket = CommonUtils.safeGetParameter(request, CasProtocolConstants.PARAMETER_TICKET);
         if (StringUtils.isBlank(ticket)) {
             LOGGER.error("Can not validate the request because no [{}] is provided via the request",
-                CasProtocolConstants.PARAMETER_TICKET);
+                    CasProtocolConstants.PARAMETER_TICKET);
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             return;
         }
@@ -97,7 +97,7 @@ public class SSOSamlProfileCallbackHandlerController extends AbstractSamlProfile
         getSamlProfileHandlerConfigurationContext().getTicketValidator().setRenew(authnRequest.isForceAuthn());
         val serviceUrl = constructServiceUrl(request, response, pair);
         LOGGER.trace("Created service url for validation: [{}]", serviceUrl);
-        val assertion = getSamlProfileHandlerConfigurationContext().getTicketValidator().validate(ticket, serviceUrl);
+        val assertion = getSamlProfileHandlerConfigurationContext().getTicketValidator().validate(ticket, serviceUrl.getRight());
         logCasValidationAssertion(assertion);
         return assertion;
     }
@@ -118,7 +118,7 @@ public class SSOSamlProfileCallbackHandlerController extends AbstractSamlProfile
 
         val binding = StringUtils.defaultIfBlank(authnRequest.getProtocolBinding(), SAMLConstants.SAML2_POST_BINDING_URI);
         LOGGER.debug("Determined authentication request binding is [{}], issued by [{}]",
-            binding, authnRequest.getIssuer().getValue());
+                binding, authnRequest.getIssuer().getValue());
 
         val entityId = facade.getEntityId();
         LOGGER.debug("Checking metadata for [{}] to see if binding [{}] is supported", entityId, binding);
@@ -127,4 +127,3 @@ public class SSOSamlProfileCallbackHandlerController extends AbstractSamlProfile
         return binding;
     }
 }
-
