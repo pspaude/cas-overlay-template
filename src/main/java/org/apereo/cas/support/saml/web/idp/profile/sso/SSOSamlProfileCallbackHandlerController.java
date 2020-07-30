@@ -5,7 +5,6 @@ import org.apereo.cas.support.saml.SamlIdPConstants;
 import org.apereo.cas.support.saml.SamlProtocolConstants;
 import org.apereo.cas.support.saml.web.idp.profile.AbstractSamlProfileHandlerController;
 import org.apereo.cas.support.saml.web.idp.profile.SamlProfileHandlerConfigurationContext;
-
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.apache.commons.lang3.StringUtils;
@@ -17,14 +16,15 @@ import org.opensaml.saml.common.SAMLObject;
 import org.opensaml.saml.common.binding.SAMLBindingSupport;
 import org.opensaml.saml.common.xml.SAMLConstants;
 import org.opensaml.saml.saml2.core.AuthnRequest;
-import org.springframework.web.bind.annotation.GetMapping;
-
+import org.springframework.web.bind.annotation.PostMapping;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
  * This is {@link SSOSamlProfileCallbackHandlerController}, which handles
  * the profile callback request to build the final saml response.
+ *
+ * Modified the SAML2Callback to a POST
  *
  * @author Misagh Moayyed
  * @since 5.0.0
@@ -64,7 +64,7 @@ public class SSOSamlProfileCallbackHandlerController extends AbstractSamlProfile
      * @param request  the request
      * @throws Exception the exception
      */
-    @GetMapping(path = SamlIdPConstants.ENDPOINT_SAML2_SSO_PROFILE_POST_CALLBACK)
+    @PostMapping(path = SamlIdPConstants.ENDPOINT_SAML2_SSO_PROFILE_POST_CALLBACK)
     protected void handleCallbackProfileRequest(final HttpServletResponse response,
                                                 final HttpServletRequest request) throws Exception {
         LOGGER.info("Received SAML callback profile request [{}]", request.getRequestURI());
@@ -75,7 +75,7 @@ public class SSOSamlProfileCallbackHandlerController extends AbstractSamlProfile
             return;
         }
 
-        val ticket = CommonUtils.safeGetParameter(request, CasProtocolConstants.PARAMETER_TICKET);
+        val ticket = request.getParameter(CasProtocolConstants.PARAMETER_TICKET);
         if (StringUtils.isBlank(ticket)) {
             LOGGER.error("Can not validate the request because no [{}] is provided via the request",
                 CasProtocolConstants.PARAMETER_TICKET);
@@ -84,16 +84,16 @@ public class SSOSamlProfileCallbackHandlerController extends AbstractSamlProfile
         }
 
         val authenticationContext = buildAuthenticationContextPair(request, authnRequest);
-        val assertion = validateRequestAndBuildCasAssertion(response, request, authenticationContext);
+        val assertion = validateRequestAndBuildCasAssertion(response, request, authenticationContext, ticket);
         val binding = determineProfileBinding(authenticationContext, assertion);
         buildSamlResponse(response, request, authenticationContext, assertion, binding);
     }
 
     private Assertion validateRequestAndBuildCasAssertion(final HttpServletResponse response,
                                                           final HttpServletRequest request,
-                                                          final Pair<AuthnRequest, MessageContext> pair) throws Exception {
+                                                          final Pair<AuthnRequest, MessageContext> pair,
+                                                          final String ticket) throws Exception {
         val authnRequest = pair.getKey();
-        val ticket = CommonUtils.safeGetParameter(request, CasProtocolConstants.PARAMETER_TICKET);
         getSamlProfileHandlerConfigurationContext().getTicketValidator().setRenew(authnRequest.isForceAuthn());
         val serviceUrl = constructServiceUrl(request, response, pair);
         LOGGER.trace("Created service url for validation: [{}]", serviceUrl);

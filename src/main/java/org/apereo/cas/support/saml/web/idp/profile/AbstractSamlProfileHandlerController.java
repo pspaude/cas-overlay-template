@@ -16,7 +16,6 @@ import org.apereo.cas.util.DateTimeUtils;
 import org.apereo.cas.util.DigestUtils;
 import org.apereo.cas.util.EncodingUtils;
 import org.apereo.cas.web.support.WebUtils;
-
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -26,8 +25,8 @@ import net.shibboleth.utilities.java.support.net.URLBuilder;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jasig.cas.client.authentication.AttributePrincipalImpl;
-import org.jasig.cas.client.authentication.DefaultAuthenticationRedirectStrategy;
 import org.jasig.cas.client.util.CommonUtils;
+import org.jasig.cas.client.util.URIBuilder;
 import org.jasig.cas.client.validation.Assertion;
 import org.jasig.cas.client.validation.AssertionImpl;
 import org.opensaml.core.xml.util.XMLObjectSupport;
@@ -42,7 +41,6 @@ import org.opensaml.saml.saml2.core.RequestAbstractType;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.servlet.ModelAndView;
-
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayInputStream;
@@ -54,11 +52,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+
 /**
  * A parent controller to handle SAML requests.
  * Specific profile endpoints are handled by extensions.
  * This parent provides the necessary ops for profile endpoint
  * controllers to respond to end points.
+ *
+ * Modified to redirect using POST instead of GET for the CAS Login request
+ *  which avoids a URL too long issue where the SAML2 Authn request is close to browser limits.
  *
  * @author Misagh Moayyed
  * @since 5.0.0
@@ -208,18 +210,46 @@ public abstract class AbstractSamlProfileHandlerController {
                                                       final HttpServletResponse response) throws Exception {
         val authnRequest = (AuthnRequest) pair.getLeft();
         val serviceUrl = constructServiceUrl(request, response, pair);
-        LOGGER.debug("Created service url [{}]", DigestUtils.abbreviate(serviceUrl));
+        LOGGER.trace("Created service url [{}]", DigestUtils.abbreviate(serviceUrl));
 
-        val initialUrl = CommonUtils.constructRedirectUrl(samlProfileHandlerConfigurationContext.getCasProperties().getServer().getLoginUrl(),
+        val loginUrl = samlProfileHandlerConfigurationContext.getCasProperties().getServer().getLoginUrl();
+        val initialUrl = CommonUtils.constructRedirectUrl(loginUrl,
             CasProtocolConstants.PARAMETER_SERVICE, serviceUrl, authnRequest.isForceAuthn(),
             authnRequest.isPassive());
 
-        val urlToRedirectTo = buildRedirectUrlByRequestedAuthnContext(initialUrl, authnRequest, request);
+        val urlToRedirectTo = new URIBuilder(buildRedirectUrlByRequestedAuthnContext(initialUrl, authnRequest, request));
+        LOGGER.trace("SAML2 Redirect URL [{}]", urlToRedirectTo);
 
-        LOGGER.debug("Redirecting SAML authN request to [{}]", urlToRedirectTo);
-        val authenticationRedirectStrategy = new DefaultAuthenticationRedirectStrategy();
-        authenticationRedirectStrategy.redirect(request, response, urlToRedirectTo);
+        val postRedirect = buildSamlPostRedirect(loginUrl, urlToRedirectTo.getQueryParams());
+
+        LOGGER.debug("Redirecting SAML authN login request using POST to [{}]", loginUrl);
+        response.getWriter().println(postRedirect);
+        response.setContentType("text/html");
     }
+
+    private String buildSamlPostRedirect(final String redirectUrl, final List<URIBuilder.BasicNameValuePair> params) {
+        final StringBuilder builder = new StringBuilder();
+        builder.append("<html>")
+                    .append("<head>")
+                        .append("<title>Login</title>")
+                    .append("</head>");
+
+        //body and form
+        builder.append("<body onload=\"document.forms[0].submit()\">")
+                        .append("<form method=\"POST\" action=\"").append(redirectUrl).append("\">");
+        //params
+        params.forEach(it -> builder.append("<input type=\"hidden\" name=\"").append(it.getName()).append("\"").append(" value=\"").append(it.getValue()).append("\"/>"));
+
+        //noscript
+        builder.append("<noscript>")
+                .append("<p>Please press the submit button to proceed!</p>")
+                .append("<input type=\"submit\" value=\"continue\" />")
+                .append("</noscript>");
+
+        //closing tags
+        builder.append("</form></body></html>");
+
+        return builder.toString();    }
 
     /**
      * Gets authentication context mappings.

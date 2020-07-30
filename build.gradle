@@ -54,7 +54,7 @@ dependencies {
     implementation "org.apereo.cas:cas-server-support-duo:${casServerVersion}" //duo mfa
     implementation "org.apereo.cas:cas-server-support-oidc:${casServerVersion}" //oidc
 
-   //Added for SAML2 Callback Cookie Code
+    //Added for SAML2 Callback Post Code
     implementation "org.apereo.cas:cas-server-core-web-api:${casServerVersion}"
     implementation "org.apereo.cas:cas-server-support-saml-idp-web:${casServerVersion}"
     implementation "org.apereo.cas:cas-server-support-saml-idp-core:${casServerVersion}"
